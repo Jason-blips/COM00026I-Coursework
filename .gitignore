@@ -17,6 +17,9 @@ build/
 # 数据目录（通常较大或需单独下载）
 data/
 
+# 训练产出（权重等已在 *.pth 中，此处忽略目录）
+checkpoints/
+
 # 环境与 IDE
 .env
 .venv
