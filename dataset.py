@@ -21,6 +21,8 @@ def _train_transforms():
         transforms.Resize((256, 256)),
         transforms.RandomCrop(224),
         transforms.RandomHorizontalFlip(),
+        transforms.RandomRotation(15),
+        transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.2),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
@@ -41,6 +43,7 @@ def get_train_val_loaders(
     val_ratio=0.1,
     num_workers=0,
     download=True,
+    pin_memory=False,
 ):
     """
     加载 trainval 并划分为 train / validation。
@@ -56,13 +59,13 @@ def get_train_val_loaders(
     )
     n = len(trainval)
     if val_ratio <= 0 or val_ratio >= 1:
-        train_loader = DataLoader(trainval, batch_size=batch_size, shuffle=True, num_workers=num_workers)
+        train_loader = DataLoader(trainval, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=pin_memory)
         return train_loader, None
     n_val = int(n * val_ratio)
     n_train = n - n_val
     train_ds, val_ds = random_split(trainval, [n_train, n_val])
-    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers)
-    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=num_workers, pin_memory=pin_memory)
+    val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_memory)
     return train_loader, val_loader
 
 
@@ -78,7 +81,7 @@ def get_train_loader_only(root=DEFAULT_ROOT, batch_size=32, num_workers=0, downl
     return DataLoader(trainval, batch_size=batch_size, shuffle=True, num_workers=num_workers)
 
 
-def get_test_loader(root=DEFAULT_ROOT, batch_size=32, num_workers=0, download=True):
+def get_test_loader(root=DEFAULT_ROOT, batch_size=32, num_workers=0, download=True, pin_memory=False):
     """
     仅用于最终评估的 test 集（文档要求 test 必须仅用于最终评估）。
     """
@@ -89,4 +92,4 @@ def get_test_loader(root=DEFAULT_ROOT, batch_size=32, num_workers=0, download=Tr
         download=download,
         transform=_eval_transforms(),
     )
-    return DataLoader(test_set, batch_size=batch_size, shuffle=False, num_workers=num_workers)
+    return DataLoader(test_set, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_memory)

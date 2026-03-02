@@ -26,7 +26,7 @@ class PetClassifier(nn.Module):
             nn.BatchNorm2d(32),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2),
-            nn.Dropout2d(0.1),
+            nn.Dropout2d(0.15),
         )
         # 卷积块 2: 112 -> 56
         self.conv_block2 = nn.Sequential(
@@ -37,7 +37,7 @@ class PetClassifier(nn.Module):
             nn.BatchNorm2d(64),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2),
-            nn.Dropout2d(0.2),
+            nn.Dropout2d(0.25),
         )
         # 卷积块 3: 56 -> 28
         self.conv_block3 = nn.Sequential(
@@ -48,7 +48,7 @@ class PetClassifier(nn.Module):
             nn.BatchNorm2d(128),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2),
-            nn.Dropout2d(0.3),
+            nn.Dropout2d(0.35),
         )
         # 卷积块 4: 28 -> 14
         self.conv_block4 = nn.Sequential(
@@ -59,7 +59,7 @@ class PetClassifier(nn.Module):
             nn.BatchNorm2d(256),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2),
-            nn.Dropout2d(0.4),
+            nn.Dropout2d(0.45),
         )
         # 全局平均池化后全连接
         self.avgpool = nn.AdaptiveAvgPool2d(1)
@@ -67,7 +67,7 @@ class PetClassifier(nn.Module):
             nn.Flatten(),
             nn.Linear(256, 256),
             nn.ReLU(inplace=True),
-            nn.Dropout(0.5),
+            nn.Dropout(0.6),
             nn.Linear(256, num_classes),
         )
 
