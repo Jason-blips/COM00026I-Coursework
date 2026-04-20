@@ -96,7 +96,7 @@ def main():
     parser.add_argument("--momentum", type=float, default=0.9, help="SGD 动量系数")
     parser.add_argument("--warmup_epochs", type=int, default=3, help="学习率 warmup 轮数（SGD 常用）")
     parser.add_argument("--two_stage", action=argparse.BooleanOptionalAction, default=True, help="启用两阶段训练：先 AdamW 再 SGD（默认开启）")
-    parser.add_argument("--stage1_epochs", type=int, default=6, help="两阶段中第 1 阶段（AdamW）训练轮数")
+    parser.add_argument("--stage1_epochs", type=int, default=3, help="两阶段中第 1 阶段（AdamW）训练轮数")
     parser.add_argument("--stage1_lr", type=float, default=3e-4, help="两阶段第 1 阶段学习率")
     parser.add_argument("--stage1_weight_decay", type=float, default=1e-4, help="两阶段第 1 阶段权重衰减")
     parser.add_argument("--stage1_warmup_epochs", type=int, default=1, help="两阶段第 1 阶段 warmup 轮数")

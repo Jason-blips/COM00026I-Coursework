@@ -73,6 +73,18 @@ class MyNN(nn.Module):
             #nn.Dropout2d(0.55),
 
         )
+
+        self.conv_block6 = nn.Sequential(
+            nn.Conv2d(512, 512, kernel_size=3, padding=1),
+            nn.BatchNorm2d(512),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(512, 512, kernel_size=3, padding=1),
+            nn.BatchNorm2d(512),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2),
+            #nn.Dropout2d(0.65),
+
+        )
         # 全局平均池化后全连接
         self.avgpool = nn.AdaptiveAvgPool2d(1)
         self.fc = nn.Sequential(
@@ -96,6 +108,7 @@ class MyNN(nn.Module):
         x = self.conv_block3(x)
         x = self.conv_block4(x)
         x = self.conv_block5(x)
+        x = self.conv_block6(x)
         x = self.avgpool(x)
         x = self.fc(x)
         return x
