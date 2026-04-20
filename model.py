@@ -7,7 +7,7 @@ import torch
 import torch.nn as nn
 
 
-class PetClassifier(nn.Module):
+class MyNN(nn.Module):
     """
     图像分类网络：若干卷积块 + 全连接层，输出 37 类（Oxford-IIIT Pet 类别数）。
     输入形状假设为 (N, 3, 224, 224)。
@@ -61,13 +61,25 @@ class PetClassifier(nn.Module):
             nn.MaxPool2d(2),
             nn.Dropout2d(0.45),
         )
+
+        self.conv_block5 = nn.Sequential(
+            nn.Conv2d(256, 512, kernel_size=3, padding=1),
+            nn.BatchNorm2d(512),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(512, 512, kernel_size=3, padding=1),
+            nn.BatchNorm2d(512),
+            nn.ReLU(inplace=True),
+            nn.MaxPool2d(2),
+            nn.Dropout2d(0.55),
+
+        )
         # 全局平均池化后全连接
         self.avgpool = nn.AdaptiveAvgPool2d(1)
         self.fc = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(256, 256),
+            nn.Linear(512, 256),
             nn.ReLU(inplace=True),
-            nn.Dropout(0.6),
+            #nn.Dropout(0.6),
             nn.Linear(256, num_classes),
         )
 
@@ -76,6 +88,7 @@ class PetClassifier(nn.Module):
         x = self.conv_block2(x)
         x = self.conv_block3(x)
         x = self.conv_block4(x)
+        x = self.conv_block5(x)
         x = self.avgpool(x)
         x = self.fc(x)
         return x
@@ -83,7 +96,7 @@ class PetClassifier(nn.Module):
 
 def build_model(num_classes=37, device=None):
     """构建模型并移到 device（如 cuda/cpu）。"""
-    model = PetClassifier(num_classes=num_classes)
+    model = MyNN(num_classes=num_classes)
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)

@@ -25,6 +25,8 @@ def train_one_epoch(model, loader, criterion, optimizer, device):
         logits = model(images)
         loss = criterion(logits, labels)
         loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)  
+        
         optimizer.step()
         total_loss += loss.item()
         pred = logits.argmax(dim=1)
@@ -88,8 +90,8 @@ def main():
 
     # 模型创建必须在「函数里」或「类外面」，不能写在 class PetClassifier 内部
     model = build_model(num_classes=NUM_CLASSES, device=device)
-    criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode="min", factor=0.5, patience=3
     )
