@@ -15,6 +15,34 @@ from dataset import get_train_val_loaders, get_test_loader, NUM_CLASSES
 from model import build_model
 
 
+def build_warmup_cosine_scheduler(optimizer, total_epochs, warmup_epochs, base_lr):
+    warmup_epochs = max(0, min(warmup_epochs, total_epochs - 1))
+    cosine_epochs = max(1, total_epochs - warmup_epochs)
+    cosine_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+        optimizer, T_max=cosine_epochs, eta_min=base_lr * 0.01
+    )
+    if warmup_epochs > 0:
+        warmup_scheduler = torch.optim.lr_scheduler.LinearLR(
+            optimizer, start_factor=0.1, end_factor=1.0, total_iters=warmup_epochs
+        )
+        return torch.optim.lr_scheduler.SequentialLR(
+            optimizer,
+            schedulers=[warmup_scheduler, cosine_scheduler],
+            milestones=[warmup_epochs],
+        )
+    return cosine_scheduler
+
+
+def build_sgd_optimizer(params, lr, momentum, weight_decay):
+    return torch.optim.SGD(
+        params,
+        lr=lr,
+        momentum=momentum,
+        weight_decay=weight_decay,
+        nesterov=True,
+    )
+
+
 def train_one_epoch(model, loader, criterion, optimizer, device):
     model.train()
     total_loss = 0.0
@@ -58,13 +86,20 @@ def main():
     parser.add_argument("--data_root", type=str, default="data", help="数据集根目录")
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--epochs", type=int, default=30, help="训练轮数，最多 30（作业要求）。试跑可加 --epochs 2 先确认能跑通")
-    parser.add_argument("--lr", type=float, default=1e-3)
+    parser.add_argument("--lr", type=float, default=5e-2)
     parser.add_argument("--val_ratio", type=float, default=0.1, help="从 trainval 中取比例做验证，0 表示不划分")
     parser.add_argument("--save_dir", type=str, default="checkpoints", help="保存权重目录")
     parser.add_argument("--num_workers", type=int, default=0)
-    parser.add_argument("--weight_decay", type=float, default=1e-4, help="L2 权重衰减，减轻过拟合")
+    parser.add_argument("--weight_decay", type=float, default=5e-4, help="L2 权重衰减，减轻过拟合")
     parser.add_argument("--patience", type=int, default=6, help="早停：验证损失连续多少轮不降则停止")
     parser.add_argument("--seed", type=int, default=42, help="随机种子，保证可复现")
+    parser.add_argument("--momentum", type=float, default=0.9, help="SGD 动量系数")
+    parser.add_argument("--warmup_epochs", type=int, default=3, help="学习率 warmup 轮数（SGD 常用）")
+    parser.add_argument("--two_stage", action=argparse.BooleanOptionalAction, default=True, help="启用两阶段训练：先 AdamW 再 SGD（默认开启）")
+    parser.add_argument("--stage1_epochs", type=int, default=6, help="两阶段中第 1 阶段（AdamW）训练轮数")
+    parser.add_argument("--stage1_lr", type=float, default=3e-4, help="两阶段第 1 阶段学习率")
+    parser.add_argument("--stage1_weight_decay", type=float, default=1e-4, help="两阶段第 1 阶段权重衰减")
+    parser.add_argument("--stage1_warmup_epochs", type=int, default=1, help="两阶段第 1 阶段 warmup 轮数")
     args = parser.parse_args()
 
     if args.epochs > 30:
@@ -97,10 +132,43 @@ def main():
 
     # 模型创建必须在「函数里」或「类外面」，不能写在 class PetClassifier 内部
     model = build_model(num_classes=NUM_CLASSES, device=device)
-    criterion = nn.CrossEntropyLoss(label_smoothing=0.05)
-    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.02)
+    if args.two_stage and args.epochs < 2:
+        print("Warning: 两阶段训练至少需要 2 个 epoch，已退回单阶段 SGD。")
+        args.two_stage = False
+
+    stage1_epochs = 0
+    if args.two_stage:
+        stage1_epochs = max(1, min(args.stage1_epochs, args.epochs - 1))
+        optimizer = torch.optim.AdamW(
+            model.parameters(), lr=args.stage1_lr, weight_decay=args.stage1_weight_decay
+        )
+        scheduler = build_warmup_cosine_scheduler(
+            optimizer=optimizer,
+            total_epochs=stage1_epochs,
+            warmup_epochs=args.stage1_warmup_epochs,
+            base_lr=args.stage1_lr,
+        )
+        print(
+            f"Two-stage training enabled | Stage1: AdamW ({stage1_epochs} epochs, lr={args.stage1_lr}) | "
+            f"Stage2: SGD ({args.epochs - stage1_epochs} epochs, lr={args.lr})"
+        )
+    else:
+        optimizer = build_sgd_optimizer(
+            params=model.parameters(),
+            lr=args.lr,
+            momentum=args.momentum,
+            weight_decay=args.weight_decay,
+        )
+        if args.lr < 1e-2:
+            print("Warning: 当前 SGD 学习率偏小，建议 --lr 0.02~0.05。")
+        scheduler = build_warmup_cosine_scheduler(
+            optimizer=optimizer,
+            total_epochs=args.epochs,
+            warmup_epochs=args.warmup_epochs,
+            base_lr=args.lr,
+        )
     print(f"Optimizer: {optimizer.__class__.__name__}, lr={optimizer.param_groups[0]['lr']}")
-    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
 
     # 2. 检查数据加载器返回的图像和标签
     images, labels = next(iter(train_loader))
@@ -112,12 +180,31 @@ def main():
     epochs_no_improve = 0
 
     for epoch in range(1, args.epochs + 1):
+        if args.two_stage and epoch == stage1_epochs + 1:
+            optimizer = build_sgd_optimizer(
+                params=model.parameters(),
+                lr=args.lr,
+                momentum=args.momentum,
+                weight_decay=args.weight_decay,
+            )
+            scheduler = build_warmup_cosine_scheduler(
+                optimizer=optimizer,
+                total_epochs=args.epochs - stage1_epochs,
+                warmup_epochs=args.warmup_epochs,
+                base_lr=args.lr,
+            )
+            print(
+                f"\nSwitching to Stage2 at epoch {epoch}: "
+                f"SGD(lr={args.lr}, momentum={args.momentum}, wd={args.weight_decay})"
+            )
+
         print(f"Epoch {epoch}/{args.epochs} starting...")
         train_loss, train_acc = train_one_epoch(model, train_loader, criterion, optimizer, device)
         if val_loader is not None:
             val_loss, val_acc = evaluate(model, val_loader, criterion, device)
             scheduler.step()
-            print(f"Epoch {epoch}/{args.epochs}  Train Loss: {train_loss:.4f}  Train Acc: {train_acc:.4f}  Val Loss: {val_loss:.4f}  Val Acc: {val_acc:.4f}")
+            current_lr = optimizer.param_groups[0]["lr"]
+            print(f"Epoch {epoch}/{args.epochs}  LR: {current_lr:.6f}  Train Loss: {train_loss:.4f}  Train Acc: {train_acc:.4f}  Val Loss: {val_loss:.4f}  Val Acc: {val_acc:.4f}")
             # 按验证损失保存最佳（损失最低 = 泛化最好，避免过拟合）
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
