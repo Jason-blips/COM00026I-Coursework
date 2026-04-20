@@ -6,6 +6,7 @@
 """
 import argparse
 import os
+import random
 import torch
 import torch.nn as nn
 from tqdm import tqdm
@@ -57,12 +58,13 @@ def main():
     parser.add_argument("--data_root", type=str, default="data", help="数据集根目录")
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--epochs", type=int, default=30, help="训练轮数，最多 30（作业要求）。试跑可加 --epochs 2 先确认能跑通")
-    parser.add_argument("--lr", type=float, default=5e-3)
+    parser.add_argument("--lr", type=float, default=1e-3)
     parser.add_argument("--val_ratio", type=float, default=0.1, help="从 trainval 中取比例做验证，0 表示不划分")
     parser.add_argument("--save_dir", type=str, default="checkpoints", help="保存权重目录")
     parser.add_argument("--num_workers", type=int, default=0)
     parser.add_argument("--weight_decay", type=float, default=1e-4, help="L2 权重衰减，减轻过拟合")
     parser.add_argument("--patience", type=int, default=6, help="早停：验证损失连续多少轮不降则停止")
+    parser.add_argument("--seed", type=int, default=42, help="随机种子，保证可复现")
     args = parser.parse_args()
 
     if args.epochs > 30:
@@ -70,6 +72,11 @@ def main():
         args.epochs = 30
 
     os.makedirs(args.save_dir, exist_ok=True)
+    random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(args.seed)
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
     if device.type == "cpu" and args.epochs >= 10:
@@ -90,11 +97,15 @@ def main():
 
     # 模型创建必须在「函数里」或「类外面」，不能写在 class PetClassifier 内部
     model = build_model(num_classes=NUM_CLASSES, device=device)
-    criterion = nn.CrossEntropyLoss(label_smoothing=0.1)
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.05)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="min", factor=0.5, patience=3
-    )
+    print(f"Optimizer: {optimizer.__class__.__name__}, lr={optimizer.param_groups[0]['lr']}")
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
+
+    # 2. 检查数据加载器返回的图像和标签
+    images, labels = next(iter(train_loader))
+    print(images.min(), images.max(), images.mean())  # 应该大约 -2~2 之间（归一化后）
+    print(labels.unique())  # 应该包含 0~36 之间的整数
 
     best_val_loss = float("inf")
     best_val_acc = 0.0
@@ -105,7 +116,7 @@ def main():
         train_loss, train_acc = train_one_epoch(model, train_loader, criterion, optimizer, device)
         if val_loader is not None:
             val_loss, val_acc = evaluate(model, val_loader, criterion, device)
-            scheduler.step(val_loss)
+            scheduler.step()
             print(f"Epoch {epoch}/{args.epochs}  Train Loss: {train_loss:.4f}  Train Acc: {train_acc:.4f}  Val Loss: {val_loss:.4f}  Val Acc: {val_acc:.4f}")
             # 按验证损失保存最佳（损失最低 = 泛化最好，避免过拟合）
             if val_loss < best_val_loss:

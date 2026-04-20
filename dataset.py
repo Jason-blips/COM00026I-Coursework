@@ -18,10 +18,9 @@ NUM_CLASSES = 37
 
 def _train_transforms():
     return transforms.Compose([
-        transforms.Resize((256, 256)),
-        transforms.RandomCrop(224),
+        transforms.RandomResizedCrop(224, scale=(0.7, 1.0), ratio=(0.9, 1.1)),
         transforms.RandomHorizontalFlip(p=0.5),
-        transforms.RandomRotation(10),         
+        transforms.RandomRotation(10),
         transforms.ColorJitter(0.15, 0.15, 0.15),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
@@ -31,7 +30,8 @@ def _train_transforms():
 def _eval_transforms():
     """验证/测试集：仅 resize 与归一化，不做随机增强"""
     return transforms.Compose([
-        transforms.Resize((224, 224)),
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])

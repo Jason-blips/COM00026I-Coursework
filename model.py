@@ -79,7 +79,7 @@ class MyNN(nn.Module):
             nn.Flatten(),
             nn.Linear(512, 256),
             nn.ReLU(inplace=True),
-            #nn.Dropout(0.6),
+            nn.Dropout(0.3),
             nn.Linear(256, num_classes),
         )
 
