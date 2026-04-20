@@ -26,7 +26,7 @@ class MyNN(nn.Module):
             nn.BatchNorm2d(32),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2),
-            nn.Dropout2d(0.15),
+            #nn.Dropout2d(0.1),
         )
         # 卷积块 2: 112 -> 56
         self.conv_block2 = nn.Sequential(
@@ -37,7 +37,7 @@ class MyNN(nn.Module):
             nn.BatchNorm2d(64),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2),
-            nn.Dropout2d(0.25),
+            #nn.Dropout2d(0.1),
         )
         # 卷积块 3: 56 -> 28
         self.conv_block3 = nn.Sequential(
@@ -48,7 +48,7 @@ class MyNN(nn.Module):
             nn.BatchNorm2d(128),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2),
-            nn.Dropout2d(0.35),
+            #nn.Dropout2d(0.1),
         )
         # 卷积块 4: 28 -> 14
         self.conv_block4 = nn.Sequential(
@@ -59,7 +59,7 @@ class MyNN(nn.Module):
             nn.BatchNorm2d(256),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2),
-            nn.Dropout2d(0.45),
+            #nn.Dropout2d(0.1),
         )
 
         self.conv_block5 = nn.Sequential(
@@ -70,7 +70,7 @@ class MyNN(nn.Module):
             nn.BatchNorm2d(512),
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2),
-            nn.Dropout2d(0.55),
+            #nn.Dropout2d(0.55),
 
         )
         # 全局平均池化后全连接
@@ -82,6 +82,13 @@ class MyNN(nn.Module):
             #nn.Dropout(0.6),
             nn.Linear(256, num_classes),
         )
+
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
 
     def forward(self, x):
         x = self.conv_block1(x)
