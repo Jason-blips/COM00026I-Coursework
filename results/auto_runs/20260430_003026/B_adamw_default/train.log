@@ -1,0 +1,10 @@
+usage: train.py [-h] [--data_root DATA_ROOT] [--batch_size BATCH_SIZE]
+                [--epochs EPOCHS] [--lr LR] [--val_ratio VAL_RATIO]
+                [--save_dir SAVE_DIR] [--num_workers NUM_WORKERS]
+                [--weight_decay WEIGHT_DECAY] [--patience PATIENCE]
+                [--seed SEED] [--momentum MOMENTUM]
+                [--warmup_epochs WARMUP_EPOCHS] [--two_stage | --no-two_stage]
+                [--stage1_epochs STAGE1_EPOCHS] [--stage1_lr STAGE1_LR]
+                [--stage1_weight_decay STAGE1_WEIGHT_DECAY]
+                [--stage1_warmup_epochs STAGE1_WARMUP_EPOCHS]
+train.py: error: unrecognized arguments: --optimizer adamw --mixup_alpha 0.2 --ema_decay 0.999

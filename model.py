@@ -28,6 +28,7 @@ class MyNN(nn.Module):
             nn.MaxPool2d(2),
             #nn.Dropout2d(0.1),
         )
+
         # 卷积块 2: 112 -> 56
         self.conv_block2 = nn.Sequential(
             nn.Conv2d(32, 64, kernel_size=3, padding=1),
@@ -39,6 +40,7 @@ class MyNN(nn.Module):
             nn.MaxPool2d(2),
             #nn.Dropout2d(0.1),
         )
+
         # 卷积块 3: 56 -> 28
         self.conv_block3 = nn.Sequential(
             nn.Conv2d(64, 128, kernel_size=3, padding=1),
@@ -50,6 +52,7 @@ class MyNN(nn.Module):
             nn.MaxPool2d(2),
             #nn.Dropout2d(0.1),
         )
+
         # 卷积块 4: 28 -> 14
         self.conv_block4 = nn.Sequential(
             nn.Conv2d(128, 256, kernel_size=3, padding=1),
@@ -62,6 +65,7 @@ class MyNN(nn.Module):
             #nn.Dropout2d(0.1),
         )
 
+        # 卷积块 5：14 -> 7
         self.conv_block5 = nn.Sequential(
             nn.Conv2d(256, 512, kernel_size=3, padding=1),
             nn.BatchNorm2d(512),
@@ -71,9 +75,9 @@ class MyNN(nn.Module):
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2),
             #nn.Dropout2d(0.55),
-
         )
 
+        # 卷积块 6：7 -> 3
         self.conv_block6 = nn.Sequential(
             nn.Conv2d(512, 512, kernel_size=3, padding=1),
             nn.BatchNorm2d(512),
@@ -83,8 +87,8 @@ class MyNN(nn.Module):
             nn.ReLU(inplace=True),
             nn.MaxPool2d(2),
             #nn.Dropout2d(0.65),
-
         )
+        
         # 全局平均池化后全连接
         self.avgpool = nn.AdaptiveAvgPool2d(1)
         self.fc = nn.Sequential(
@@ -115,7 +119,6 @@ class MyNN(nn.Module):
 
 
 def build_model(num_classes=37, device=None):
-    """构建模型并移到 device（如 cuda/cpu）。"""
     model = MyNN(num_classes=num_classes)
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

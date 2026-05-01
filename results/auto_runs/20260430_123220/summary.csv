@@ -1,0 +1,6 @@
+experiment,return_code,best_val_acc,test_loss,test_acc,log_path
+S1_v2_reproduce,0,0.6522,1.3739,0.6271,results/auto_runs/20260430_123220/S1_v2_reproduce/train.log
+S2_two_stage_lr045,0,0.6332,1.4447,0.6023,results/auto_runs/20260430_123220/S2_two_stage_lr045/train.log
+S3_two_stage_lr055,0,0.6793,1.3343,0.6312,results/auto_runs/20260430_123220/S3_two_stage_lr055/train.log
+S4_two_stage_long_stage1,0,0.3016,2.7054,0.2434,results/auto_runs/20260430_123220/S4_two_stage_long_stage1/train.log
+S5_single_stage_strong_sgd,0,0.6712,1.3219,0.6402,results/auto_runs/20260430_123220/S5_single_stage_strong_sgd/train.log

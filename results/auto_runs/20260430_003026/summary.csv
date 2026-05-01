@@ -1,0 +1,5 @@
+experiment,return_code,best_loss_test_loss,best_loss_test_acc,best_acc_test_loss,best_acc_test_acc,log_path
+B_adamw_default,2,,,,,results/auto_runs/20260430_003026/B_adamw_default/train.log
+C_adamw_high_lr,2,,,,,results/auto_runs/20260430_003026/C_adamw_high_lr/train.log
+D_stronger_regularization,2,,,,,results/auto_runs/20260430_003026/D_stronger_regularization/train.log
+E_no_mixup_ablation,2,,,,,results/auto_runs/20260430_003026/E_no_mixup_ablation/train.log
