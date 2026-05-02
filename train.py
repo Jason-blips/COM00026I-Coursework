@@ -86,7 +86,7 @@ def main():
     parser.add_argument("--data_root", type=str, default="data", help="数据集根目录")
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--epochs", type=int, default=30, help="训练轮数，最多 30 epochs")
-    parser.add_argument("--lr", type=float, default=5e-2)
+    parser.add_argument("--lr", type=float, default=0.055)
     parser.add_argument("--val_ratio", type=float, default=0.1, help="从 trainval 中取比例做验证，0 表示不划分")
     parser.add_argument("--save_dir", type=str, default="checkpoints", help="保存权重目录")
     parser.add_argument("--num_workers", type=int, default=0)

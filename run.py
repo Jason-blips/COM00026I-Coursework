@@ -10,17 +10,6 @@ import sys
 # 仅做超参数微调：不改模型结构，不改数据集，不改训练代码逻辑
 EXPERIMENTS = [
     {
-        "name": "B0_s5_baseline",
-        "args": [
-            "--no-two_stage",
-            "--lr", "0.05",
-            "--warmup_epochs", "5",
-            "--weight_decay", "5e-4",
-            "--momentum", "0.9",
-            "--patience", "5",
-        ],
-    },
-    {
         "name": "B1_single_stage_lr045",
         "args": [
             "--no-two_stage",
