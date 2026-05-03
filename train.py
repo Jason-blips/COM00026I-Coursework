@@ -86,11 +86,11 @@ def main():
     parser.add_argument("--data_root", type=str, default="data", help="数据集根目录")
     parser.add_argument("--batch_size", type=int, default=32)
     parser.add_argument("--epochs", type=int, default=30, help="训练轮数，最多 30 epochs")
-    parser.add_argument("--lr", type=float, default=0.07)
+    parser.add_argument("--lr", type=float, default=0.075)
     parser.add_argument("--val_ratio", type=float, default=0.1, help="从 trainval 中取比例做验证，0 表示不划分")
     parser.add_argument("--save_dir", type=str, default="checkpoints", help="保存权重目录")
     parser.add_argument("--num_workers", type=int, default=0)
-    parser.add_argument("--weight_decay", type=float, default=7e-4, help="L2 权重衰减，减轻过拟合")
+    parser.add_argument("--weight_decay", type=float, default=7.5e-4, help="L2 权重衰减，减轻过拟合")
     parser.add_argument("--patience", type=int, default=5, help="早停：验证损失连续多少轮不降则停止")
     parser.add_argument("--seed", type=int, default=42, help="随机种子，保证可复现")
     parser.add_argument("--momentum", type=float, default=0.9, help="SGD 动量系数")
@@ -115,7 +115,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
     if device.type == "cpu" and args.epochs >= 10:
-        print("Tip: CPU 训练较慢，可先用 python train.py --epochs 2 试跑确认无误再跑满 30 轮。")
+        print("Tip: CPU 训练较慢")
 
     print("Loading dataset (first run may download ~800MB)...")
     pin_memory = device.type == "cuda"  # CPU 时关闭 pin_memory 避免警告
@@ -131,7 +131,7 @@ def main():
     print(f"Train batches per epoch: {n_batches} (one epoch may take several min on CPU)")
 
     model = build_model(num_classes=NUM_CLASSES, device=device)
-    criterion = nn.CrossEntropyLoss(label_smoothing=0.06)
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.08)
     if args.two_stage and args.epochs < 2:
         print("Warning: 两阶段训练至少需要 2 个 epoch，已退回单阶段 SGD。")
         args.two_stage = False
