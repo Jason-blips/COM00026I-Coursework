@@ -90,7 +90,7 @@ def main():
     parser.add_argument("--val_ratio", type=float, default=0.1, help="从 trainval 中取比例做验证，0 表示不划分")
     parser.add_argument("--save_dir", type=str, default="checkpoints", help="保存权重目录")
     parser.add_argument("--num_workers", type=int, default=0)
-    parser.add_argument("--weight_decay", type=float, default=7.5e-4, help="L2 权重衰减，减轻过拟合")
+    parser.add_argument("--weight_decay", type=float, default=1.5e-3, help="L2 权重衰减，减轻过拟合")
     parser.add_argument("--patience", type=int, default=5, help="早停：验证损失连续多少轮不降则停止")
     parser.add_argument("--seed", type=int, default=42, help="随机种子，保证可复现")
     parser.add_argument("--momentum", type=float, default=0.9, help="SGD 动量系数")
@@ -131,7 +131,7 @@ def main():
     print(f"Train batches per epoch: {n_batches} (one epoch may take several min on CPU)")
 
     model = build_model(num_classes=NUM_CLASSES, device=device)
-    criterion = nn.CrossEntropyLoss(label_smoothing=0.08)
+    criterion = nn.CrossEntropyLoss(label_smoothing=0.06)
     if args.two_stage and args.epochs < 2:
         print("Warning: 两阶段训练至少需要 2 个 epoch，已退回单阶段 SGD。")
         args.two_stage = False
