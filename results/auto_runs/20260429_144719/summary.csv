@@ -1,5 +1,0 @@
-experiment,return_code,best_val_acc,test_loss,test_acc,log_path
-E1_two_stage_stable,0,0.5489,1.7985,0.4884,results/auto_runs/20260429_144719/E1_two_stage_stable/train.log
-E2_two_stage_middle,0,0.6196,1.7049,0.5209,results/auto_runs/20260429_144719/E2_two_stage_middle/train.log
-E3_two_stage_high,0,0.6413,1.4955,0.5808,results/auto_runs/20260429_144719/E3_two_stage_high/train.log
-E4_single_stage_sgd,0,0.6141,1.574,0.5552,results/auto_runs/20260429_144719/E4_single_stage_sgd/train.log

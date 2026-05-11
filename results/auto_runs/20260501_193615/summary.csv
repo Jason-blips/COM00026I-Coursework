@@ -1,7 +1,0 @@
-experiment,return_code,best_val_acc,test_loss,test_acc,log_path
-B1_single_stage_lr045,0,0.6821,1.3532,0.6315,results/auto_runs/20260501_193615/B1_single_stage_lr045/train.log
-B2_single_stage_lr055,0,0.6929,1.2961,0.6506,results/auto_runs/20260501_193615/B2_single_stage_lr055/train.log
-B3_single_stage_warmup3,0,0.6359,1.3828,0.6239,results/auto_runs/20260501_193615/B3_single_stage_warmup3/train.log
-B4_single_stage_wd3e4,0,0.6522,1.4064,0.6214,results/auto_runs/20260501_193615/B4_single_stage_wd3e4/train.log
-B5_single_stage_wd8e4,0,0.6766,1.2956,0.643,results/auto_runs/20260501_193615/B5_single_stage_wd8e4/train.log
-B6_two_stage_short_rescue,0,0.6821,1.2925,0.6487,results/auto_runs/20260501_193615/B6_two_stage_short_rescue/train.log

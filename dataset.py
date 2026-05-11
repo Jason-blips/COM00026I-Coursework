@@ -1,88 +1,220 @@
-"""
-1.2 Dataset: Oxford-IIIT Pet
-- 使用 torchvision.datasets.OxfordIIITPet 加载
-- trainval 用于训练（可再划分为 train/val）；test 仅用于最终评估
-- 数据增强仅应用于训练集（符合作业要求）
-"""
+# DATASET.py
 import os
+from pathlib import Path
+from typing import Optional, Tuple
+
+import numpy as np
 import torch
-from torch.utils.data import DataLoader, random_split
-from torchvision import datasets
+from PIL import Image
+from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
 
-# 数据存放目录（与 .gitignore 中 data/ 一致）
 DEFAULT_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
-# Oxford-IIIT Pet 共 37 类（breed）
 NUM_CLASSES = 37
 
 
-def _train_transforms():
+def get_train_transform():
     return transforms.Compose([
-        transforms.RandomResizedCrop(224, scale=(0.7, 1.0), ratio=(0.9, 1.1)),
+        transforms.RandomResizedCrop(224, scale=(0.75, 1.0)),
         transforms.RandomHorizontalFlip(p=0.5),
         transforms.RandomRotation(10),
-        transforms.ColorJitter(0.15, 0.15, 0.15),
+        # transforms.ColorJitter(
+        #     brightness=0.1, 
+        #     contrast=0.1,
+        #     saturation=0.05,
+        #     hue=0.1,
+        # ),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        transforms.RandomErasing(p=0.2, scale=(0.01, 0.1)),
     ])
 
-
-def _eval_transforms():
-    """验证/测试集：仅 resize 与归一化，不做随机增强"""
-    return transforms.Compose([
-        transforms.Resize(256),
-        transforms.CenterCrop(224),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    ])
-
-
-def get_train_val_loaders(root, batch_size, val_ratio, num_workers, download, pin_memory):
-    # 分别创建两个数据集，各自设置 transform，互不干扰
-    full_train = datasets.OxfordIIITPet(
-        root=root, split="trainval", target_types="category", download=download,
-        transform=_train_transforms()
-    )
-    full_val = datasets.OxfordIIITPet(
-        root=root, split="trainval", target_types="category", download=download,
-        transform=_eval_transforms()
+def get_val_transform():
+    return transforms.Compose(
+        [
+            transforms.Resize((224, 224)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+        ]
     )
 
-    n = len(full_train)
-    n_val = int(n * val_ratio)
-    n_train = n - n_val
-    train_idx, val_idx = random_split(range(n), [n_train, n_val])
 
-    train_subset = torch.utils.data.Subset(full_train, train_idx)
-    val_subset = torch.utils.data.Subset(full_val, val_idx)
+def _resolve_oxford_pet_dirs(root: str) -> Tuple[Path, Path, Path]:
+    root_path = Path(root)
+    candidates = [
+        root_path / "oxford-iiit-pet",
+        root_path,
+    ]
+    for base in candidates:
+        img_dir = base / "images"
+        ann_dir = base / "annotations"
+        trainval_txt = ann_dir / "trainval.txt"
+        test_txt = ann_dir / "test.txt"
+        if img_dir.is_dir() and trainval_txt.is_file() and test_txt.is_file():
+            return img_dir, trainval_txt, test_txt
+    raise FileNotFoundError(
+        "Cannot find Oxford-IIIT Pet folders. Expect one of:\n"
+        "1) <data_root>/oxford-iiit-pet/images + annotations/\n"
+        "2) <data_root>/images + annotations/"
+    )
 
-    train_loader = DataLoader(train_subset, batch_size=batch_size, shuffle=True,
-                              num_workers=num_workers, pin_memory=pin_memory)
-    val_loader = DataLoader(val_subset, batch_size=batch_size, shuffle=False,
-                            num_workers=num_workers, pin_memory=pin_memory)
+
+def _read_split(split_file: Path) -> list[tuple[str, int]]:
+    samples: list[tuple[str, int]] = []
+    for line in split_file.read_text(encoding="utf-8").splitlines():
+        parts = line.strip().split()
+        if len(parts) < 2:
+            continue
+        stem = parts[0]
+        label_1based = int(parts[1])
+        label_0based = label_1based - 1
+        samples.append((stem, label_0based))
+    if not samples:
+        raise RuntimeError(f"Empty split file: {split_file}")
+    return samples
+
+
+def _split_indices(n: int, val_ratio: float, seed: int) -> Tuple[list[int], list[int]]:
+    if n < 2 or val_ratio <= 0:
+        return list(range(n)), []
+    val_len = int(n * val_ratio)
+    val_len = max(1, min(val_len, n - 1))
+    g = torch.Generator().manual_seed(seed)
+    perm = torch.randperm(n, generator=g).tolist()
+    return perm[val_len:], perm[:val_len]
+
+
+class PetsDataset(Dataset):
+    def __init__(
+        self,
+        img_dir: Path,
+        samples: list[tuple[str, int]],
+        transform=None,
+        is_train: bool = True,
+    ):
+        self.img_dir = img_dir
+        self.samples = samples
+        self.transform = transform
+        self.is_train = is_train
+
+    def __len__(self):
+        return len(self.samples)
+
+    def __getitem__(self, idx):
+        stem, label = self.samples[idx]
+        img_path = self.img_dir / f"{stem}.jpg"
+        img = Image.open(img_path).convert("RGB")
+
+        if self.transform is not None:
+            img = self.transform(img)
+
+        return img, torch.tensor(label, dtype=torch.long)
+
+def get_train_val_loaders(
+    root: str,
+    batch_size: int,
+    val_ratio: float,
+    num_workers: int,
+    download: bool,
+    pin_memory: bool,
+    seed: int = 42,
+) -> Tuple[DataLoader, Optional[DataLoader]]:
+    del download  # Kept for API compatibility with train.py
+    img_dir, trainval_txt, _ = _resolve_oxford_pet_dirs(root)
+    all_samples = _read_split(trainval_txt)
+    train_idx, val_idx = _split_indices(len(all_samples), val_ratio=val_ratio, seed=seed)
+
+    train_samples = [all_samples[i] for i in train_idx]
+    train_ds = PetsDataset(
+        img_dir=img_dir,
+        samples=train_samples,
+        transform=get_train_transform(),
+        is_train=True,
+    )
+    train_loader = DataLoader(
+        train_ds,
+        batch_size=batch_size,
+        shuffle=True,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+    )
+
+    if not val_idx:
+        return train_loader, None
+
+    val_samples = [all_samples[i] for i in val_idx]
+    val_ds = PetsDataset(
+        img_dir=img_dir,
+        samples=val_samples,
+        transform=get_val_transform(),
+        is_train=False,
+    )
+    val_loader = DataLoader(
+        val_ds,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+    )
     return train_loader, val_loader
 
-def get_train_loader_only(root=DEFAULT_ROOT, batch_size=32, num_workers=0, download=True):
-    """仅返回 trainval 的 DataLoader（不划分 val），用于训练。"""
-    trainval = datasets.OxfordIIITPet(
-        root=root,
-        split="trainval",
-        target_types="category",
-        download=download,
-        transform=_train_transforms(),
-    )
-    return DataLoader(trainval, batch_size=batch_size, shuffle=True, num_workers=num_workers)
 
-
-def get_test_loader(root=DEFAULT_ROOT, batch_size=32, num_workers=0, download=True, pin_memory=False):
-    """
-    仅用于最终评估的 test 集（文档要求 test 必须仅用于最终评估）。
-    """
-    test_set = datasets.OxfordIIITPet(
-        root=root,
-        split="test",
-        target_types="category",
-        download=download,
-        transform=_eval_transforms(),
+def get_test_loader(
+    root: str,
+    batch_size: int,
+    num_workers: int,
+    download: bool,
+    pin_memory: bool,
+) -> DataLoader:
+    del download  # Kept for API compatibility with train.py
+    img_dir, _, test_txt = _resolve_oxford_pet_dirs(root)
+    test_samples = _read_split(test_txt)
+    test_ds = PetsDataset(
+        img_dir=img_dir,
+        samples=test_samples,
+        transform=get_val_transform(),
+        is_train=False,
     )
-    return DataLoader(test_set, batch_size=batch_size, shuffle=False, num_workers=num_workers, pin_memory=pin_memory)
+    return DataLoader(
+        test_ds,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+    )
+
+def get_train_eval_loader(
+    root: str,
+    batch_size: int,
+    val_ratio: float,
+    num_workers: int,
+    download: bool,
+    pin_memory: bool,
+    seed: int = 42,
+) -> DataLoader:
+    del download
+    img_dir, trainval_txt, _ = _resolve_oxford_pet_dirs(root)
+    all_samples = _read_split(trainval_txt)
+
+    train_idx, _ = _split_indices(
+        len(all_samples),
+        val_ratio=val_ratio,
+        seed=seed
+    )
+
+    train_samples = [all_samples[i] for i in train_idx]
+
+    train_eval_ds = PetsDataset(
+        img_dir=img_dir,
+        samples=train_samples,
+        transform=get_val_transform(),
+        is_train=False,
+    )
+
+    return DataLoader(
+        train_eval_ds,
+        batch_size=batch_size,
+        shuffle=False,
+        num_workers=num_workers,
+        pin_memory=pin_memory,
+    )

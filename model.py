@@ -1,126 +1,91 @@
-"""
-1.3 Neural Network Architecture
-- 自写分类网络，输入图像，输出类别（37 类）
-- 从零训练，不使用预训练权重；结构为自行设计，使用 PyTorch 实现
-"""
+# MODEL.py
 import torch
 import torch.nn as nn
 
-
-class MyNN(nn.Module):
-    """
-    图像分类网络：若干卷积块 + 全连接层，输出 37 类（Oxford-IIIT Pet 类别数）。
-    输入形状假设为 (N, 3, 224, 224)。
-    """
-
-    def __init__(self, num_classes=37, in_channels=3):
+class ImprovedBlock(nn.Module):
+    def __init__(self, in_ch, out_ch, stride=1):
         super().__init__()
-        self.num_classes = num_classes
 
-        # 卷积块 1: 224 -> 112
-        self.conv_block1 = nn.Sequential(
-            nn.Conv2d(in_channels, 32, kernel_size=3, padding=1),
-            nn.BatchNorm2d(32),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(32, 32, kernel_size=3, padding=1),
-            nn.BatchNorm2d(32),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2),
-            #nn.Dropout2d(0.1),
-        )
+        self.conv1 = nn.Conv2d(in_ch, out_ch, 3, stride, 1, bias=False)
+        self.bn1 = nn.BatchNorm2d(out_ch)
+        self.conv2 = nn.Conv2d(out_ch, out_ch, 3, 1, 1, bias=False)
+        self.bn2 = nn.BatchNorm2d(out_ch)
+        self.relu = nn.ReLU(inplace=True)
+        
+        self.shortcut = nn.Sequential()
+        if stride != 1 or in_ch != out_ch:
+            self.shortcut = nn.Sequential(
+                nn.AvgPool2d(stride),
+                nn.Conv2d(in_ch, out_ch, 1, 1, bias=False),
+                nn.BatchNorm2d(out_ch)
+            )
 
-        # 卷积块 2: 112 -> 56
-        self.conv_block2 = nn.Sequential(
-            nn.Conv2d(32, 64, kernel_size=3, padding=1),
+    def forward(self, x):
+        identity = self.shortcut(x)
+        out = self.relu(self.bn1(self.conv1(x)))
+        out = self.bn2(self.conv2(out))
+        out += identity
+        return self.relu(out)
+
+class MyFinalModel(nn.Module):
+    def __init__(self, num_classes=37):
+        super().__init__()
+        # 第一层：快速降低空间分辨率 (112x112)
+        self.stem = nn.Sequential(
+            nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False), # Conv3x3 stride=1 
             nn.BatchNorm2d(64),
             nn.ReLU(inplace=True),
-            nn.Conv2d(64, 64, kernel_size=3, padding=1),
-            nn.BatchNorm2d(64),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2),
-            #nn.Dropout2d(0.1),
-        )
-
-        # 卷积块 3: 56 -> 28
-        self.conv_block3 = nn.Sequential(
-            nn.Conv2d(64, 128, kernel_size=3, padding=1),
-            nn.BatchNorm2d(128),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(128, 128, kernel_size=3, padding=1),
-            nn.BatchNorm2d(128),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2),
-            #nn.Dropout2d(0.1),
-        )
-
-        # 卷积块 4: 28 -> 14
-        self.conv_block4 = nn.Sequential(
-            nn.Conv2d(128, 256, kernel_size=3, padding=1),
-            nn.BatchNorm2d(256),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(256, 256, kernel_size=3, padding=1),
-            nn.BatchNorm2d(256),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2),
-            #nn.Dropout2d(0.1),
-        )
-
-        # 卷积块 5：14 -> 7
-        self.conv_block5 = nn.Sequential(
-            nn.Conv2d(256, 512, kernel_size=3, padding=1),
-            nn.BatchNorm2d(512),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(512, 512, kernel_size=3, padding=1),
-            nn.BatchNorm2d(512),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2),
-            #nn.Dropout2d(0.55),
-        )
-
-        # 卷积块 6：7 -> 3
-        self.conv_block6 = nn.Sequential(
-            nn.Conv2d(512, 512, kernel_size=3, padding=1),
-            nn.BatchNorm2d(512),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(512, 512, kernel_size=3, padding=1),
-            nn.BatchNorm2d(512),
-            nn.ReLU(inplace=True),
-            nn.MaxPool2d(2),
-            #nn.Dropout2d(0.65),
         )
         
-        # 全局平均池化后全连接
-        self.avgpool = nn.AdaptiveAvgPool2d(1)
+        self.stage1 = nn.Sequential(
+            ImprovedBlock(64, 128, stride = 2),
+            ImprovedBlock(128, 128, stride = 1)
+        )  
+        self.stage2 = nn.Sequential(
+            ImprovedBlock(128, 256, stride = 2),
+            ImprovedBlock(256, 256, stride = 1)
+        )
+        self.stage3 = nn.Sequential(
+            ImprovedBlock(256, 512, stride = 2),
+            ImprovedBlock(512, 512, stride = 1)
+        )
+        
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.max_pool = nn.AdaptiveMaxPool2d(1)
+        
         self.fc = nn.Sequential(
             nn.Flatten(),
-            nn.Linear(512, 256),
+            nn.Linear(512 * 2, 512),
+            nn.BatchNorm1d(512),
             nn.ReLU(inplace=True),
-            nn.Dropout(0.3),
-            nn.Linear(256, num_classes),
+            nn.Dropout(0.5),
+            nn.Linear(512, num_classes)
         )
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
-            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+            elif isinstance(m, (nn.BatchNorm2d, nn.BatchNorm1d)):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
 
     def forward(self, x):
-        x = self.conv_block1(x)
-        x = self.conv_block2(x)
-        x = self.conv_block3(x)
-        x = self.conv_block4(x)
-        x = self.conv_block5(x)
-        x = self.conv_block6(x)
-        x = self.avgpool(x)
-        x = self.fc(x)
-        return x
-
+        x = self.stem(x)
+        x = self.stage1(x)
+        x = self.stage2(x)
+        x = self.stage3(x)
+        
+        avg_x = self.avg_pool(x)
+        max_x = self.max_pool(x)
+        x = torch.cat([avg_x, max_x], dim=1)
+        
+        return self.fc(x)
 
 def build_model(num_classes=37, device=None):
-    model = MyNN(num_classes=num_classes)
+    model = MyFinalModel(num_classes=num_classes)
     if device is None:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = model.to(device)
     return model
+
+
