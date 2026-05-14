@@ -1,18 +1,15 @@
-"""
-TRAIN.py
-"""
-import argparse
 import os
-import random
-
-import numpy as np
 import torch
+import random
+import argparse
+import numpy as np
 import torch.nn as nn
 from tqdm import tqdm
 
 from dataset import NUM_CLASSES, get_test_loader, get_train_val_loaders, get_train_eval_loader
 from model import build_model
 
+# Warmup + cosine decay learning rate scheduler
 def build_warmup_cosine_scheduler(optimizer, total_epochs, warmup_epochs, base_lr):
     warmup_epochs = max(0, min(warmup_epochs, total_epochs - 1))
     cosine_epochs = max(1, total_epochs - warmup_epochs)
@@ -37,7 +34,7 @@ def build_warmup_cosine_scheduler(optimizer, total_epochs, warmup_epochs, base_l
 
     return cosine_scheduler
 
-
+# SGD with momentum and weight decay
 def build_sgd_optimizer(params, lr, momentum, weight_decay):
     return torch.optim.SGD(
         params,
@@ -47,7 +44,9 @@ def build_sgd_optimizer(params, lr, momentum, weight_decay):
         nesterov=True,
     )
 
-def train_one_epoch(model, loader, criterion, optimizer, device, args):
+# Train model for one epoch
+def train_one_epoch(model, loader, criterion, optimizer, device):
+    # Enable training mode
     model.train()
     total_loss = 0.0
     correct = 0
@@ -57,38 +56,21 @@ def train_one_epoch(model, loader, criterion, optimizer, device, args):
         images = images.to(device)
         labels = targets.long().to(device)
 
+        # Clear previous gradients
         optimizer.zero_grad(set_to_none=True)
-
-        if args.mixup_alpha > 0:
-            # 1. Generate Mixup coefficients
-            lam = np.random.beta(args.mixup_alpha, args.mixup_alpha)
-            index = torch.randperm(images.size(0), device=device)
-            
-            # 2. Mix images
-            mixed_images = lam * images + (1 - lam) * images[index]
-            labels_a, labels_b = labels, labels[index]
-
-            # 3. Forward pass & Mixed Loss
-            logits = model(mixed_images)
-            loss = lam * criterion(logits, labels_a) + (1 - lam) * criterion(logits, labels_b)
-            
-            # 4. Correct Accuracy Logic: 
-            # Compare predictions against the label that has the most 'weight' in the mix
-            pred = logits.argmax(dim=1)
-            if lam >= 0.5:
-                correct += (pred == labels_a).sum().item()
-            else:
-                correct += (pred == labels_b).sum().item()
-        else:
-            logits = model(images)
-            loss = criterion(logits, labels)
-            pred = logits.argmax(dim=1)
-            correct += (pred == labels).sum().item()
-
+        # Forward pass
+        logits = model(images)
+        # Compute classification loss
+        loss = criterion(logits, labels)
+        # Backpropagation
         loss.backward()
-        # Grad clipping is good for stability with Mixup
+        # Stabilise training
         torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+        # Update model parameters
         optimizer.step()
+        # Compute training accuracy
+        pred = logits.argmax(dim=1)
+        correct += (pred == labels).sum().item()
 
         total_loss += loss.item()
         total += labels.size(0)
@@ -96,7 +78,7 @@ def train_one_epoch(model, loader, criterion, optimizer, device, args):
     return total_loss / max(len(loader), 1), correct / max(total, 1)
 
 
-
+# Evaluate model on Validation or test set
 @torch.no_grad()
 def evaluate(model, loader, criterion, device):
     model.eval()
@@ -121,31 +103,31 @@ def evaluate(model, loader, criterion, device):
 
 def main():       
     parser = argparse.ArgumentParser()   
-    parser.add_argument("--data_root", type=str, default="data", help="数据集根目录")
+    parser.add_argument("--data_root", type=str, default="data")
     parser.add_argument("--batch_size", type=int, default=32)
-    parser.add_argument("--epochs", type=int, default=30, help="训练轮数，最多 30 epochs")
+    parser.add_argument("--epochs", type=int, default=30, help="Number of training epochs (maximum 30)")
     parser.add_argument("--lr", type=float, default=0.075)
-    parser.add_argument("--val_ratio", type=float, default=0.1, help="从 trainval 中取比例做验证，0 表示不划分")
-    parser.add_argument("--save_dir", type=str, default="checkpoints", help="保存权重目录")
-    parser.add_argument("--num_workers", type=int, default=0)
-    parser.add_argument("--weight_decay", type=float, default=3.5e-3, help="L2 权重衰减，减轻过拟合")
-    parser.add_argument("--patience", type=int, default=5, help="早停：验证损失连续多少轮不降则停止")
-    parser.add_argument("--seed", type=int, default=42, help="随机种子，保证可复现")
-    parser.add_argument("--momentum", type=float, default=0.9, help="SGD 动量系数")
-    parser.add_argument("--warmup_epochs", type=int, default=3, help="学习率 warmup 轮数")
-    
+    parser.add_argument("--val_ratio", type=float, default=0.1, help="Validation split ratio from the official trainval set")
+    parser.add_argument("--save_dir", type=str, default="checkpoints")
+    parser.add_argument("--num_workers", type=int, default=8)
+    parser.add_argument("--weight_decay", type=float, default=3.5e-3)
+    parser.add_argument("--patience", type=int, default=5, help="Early stopping patience")
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--momentum", type=float, default=0.9)
+    parser.add_argument("--warmup_epochs", type=int, default=3)
     parser.add_argument("--label_smoothing", type=float, default=0.06)
-    parser.add_argument("--mixup_alpha", type=float, default=0.0)
-    args = parser.parse_args([])     # 无参数
+    args = parser.parse_args([])   
 
     if args.epochs > 30:
-        print("Warning: 作业要求最多 30 epochs，已自动限制为 30")
         args.epochs = 30
 
     os.makedirs(args.save_dir, exist_ok=True)
+
+    # Reproducibility
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
+
     if torch.cuda.is_available():
         torch.backends.cudnn.benchmark = False
         torch.backends.cudnn.deterministic = True
@@ -153,9 +135,6 @@ def main():
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"Device: {device}")
-    if device.type == "cpu" and args.epochs >= 10:
-        print("Tip: CPU 训练较慢")
-
     print("Loading dataset (first run may download ~800MB)...")
     pin_memory = device.type == "cuda"
     train_loader, val_loader = get_train_val_loaders(
@@ -166,6 +145,7 @@ def main():
         download=True,
         pin_memory=pin_memory,
         seed=args.seed,
+
     )
     print(f"Train batches per epoch: {len(train_loader)}")
 
@@ -189,7 +169,7 @@ def main():
     for _, labels in train_loader:
         print("Another batch label range:", labels.min().item(), labels.max().item())
         break
-        
+    
     model = build_model(num_classes=NUM_CLASSES, device=device)
 
     criterion = nn.CrossEntropyLoss(
@@ -213,6 +193,8 @@ def main():
     best_val_acc = 0.0
     epochs_no_improve = 0
 
+    lr_history = []
+
     for epoch in range(1, args.epochs + 1):
 
         train_loss, train_acc = train_one_epoch(
@@ -221,7 +203,6 @@ def main():
             criterion=criterion,
             optimizer=optimizer,
             device=device,
-            args=args,
         )
 
         val_loss, val_acc = evaluate(
@@ -232,6 +213,7 @@ def main():
         )
 
         current_lr = optimizer.param_groups[0]["lr"]
+        lr_history.append(current_lr)
 
         print(
             f"Epoch {epoch}/{args.epochs} "
@@ -251,18 +233,21 @@ def main():
                 os.path.join(args.save_dir, "best.pth")
             )
 
-            print("  -> 新最佳模型已保存")
+            print("  -> Best model saved")
 
         else:
             epochs_no_improve += 1
 
         if epochs_no_improve >= args.patience:
-            print("\n早停：验证集无改善，停止训练")
+            print("\nEarly stopping triggered due to no validation improvement.")
             break
 
         scheduler.step()
 
-    print("\n--- 最终测试集评估 ---")
+    print("\nLearning rate used at each epoch:")
+    print([round(lr, 8) for lr in lr_history])    
+
+    print("\n--- Final Test Evaluation ---")
     test_loader = get_test_loader(
         root=args.data_root,
         batch_size=args.batch_size,
@@ -293,8 +278,8 @@ def main():
         criterion,
         device
     )
-    print(f"Final Train Loss: {final_train_loss:.4f} | Final Train Acc: {final_train_acc:.4f}")
-    print(f"Test Loss: {test_loss:.4f} | Test Acc: {test_acc:.4f}")
+    print(f"Final Train Loss: {final_train_loss:.4f} | Final Train Acc: {final_train_acc * 100:.2f}%")
+    print(f"Test Loss: {test_loss:.4f} | Test Acc: {test_acc * 100:.2f}%")
     torch.save(model.state_dict(), os.path.join(args.save_dir, "final.pth"))
     print("Done.")
 

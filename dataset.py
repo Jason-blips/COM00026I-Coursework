@@ -1,18 +1,15 @@
-# DATASET.py
 import os
-from pathlib import Path
-from typing import Optional, Tuple
-
-import numpy as np
 import torch
 from PIL import Image
+from pathlib import Path
+from typing import Optional, Tuple
 from torch.utils.data import DataLoader, Dataset
-from torchvision import transforms
+from torchvision import transforms, datasets
 
 DEFAULT_ROOT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
 NUM_CLASSES = 37
 
-
+# Data augmentation for training
 def get_train_transform():
     return transforms.Compose([
         transforms.RandomResizedCrop(224, scale=(0.75, 1.0)),
@@ -29,16 +26,17 @@ def get_train_transform():
         transforms.RandomErasing(p=0.2, scale=(0.01, 0.1)),
     ])
 
+# Standard preprocessing for validation and test
 def get_val_transform():
-    return transforms.Compose(
-        [
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ]
-    )
+    return transforms.Compose([
+        transforms.Resize(256),
+        transforms.CenterCrop(224),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                             std=[0.229, 0.224, 0.225]),
+    ])
 
-
+# Locate Oxford-IIIT Pet dataset structure
 def _resolve_oxford_pet_dirs(root: str) -> Tuple[Path, Path, Path]:
     root_path = Path(root)
     candidates = [
@@ -58,7 +56,37 @@ def _resolve_oxford_pet_dirs(root: str) -> Tuple[Path, Path, Path]:
         "2) <data_root>/images + annotations/"
     )
 
+# Automatically download dataset if missing
+def _download_oxford_pet(root: str, download: bool):
+    if not download:
+        print("Dataset auto-download disabled.")
+        return
 
+    try:
+        img_dir, trainval_txt, test_txt = _resolve_oxford_pet_dirs(root)
+        print("Oxford-IIIT Pet dataset found locally.")
+        print(f"Images directory: {img_dir}")
+        print(f"Train split file: {trainval_txt}")
+        print(f"Test split file: {test_txt}")
+        return
+    except FileNotFoundError:
+        print("Oxford-IIIT Pet dataset not found. Downloading with torchvision...")
+
+    datasets.OxfordIIITPet(
+        root=root,
+        split="trainval",
+        target_types="category",
+        download=True,
+    )
+
+    datasets.OxfordIIITPet(
+        root=root,
+        split="test",
+        target_types="category",
+        download=True,
+    )
+
+# Read official Oxford-IIIT Pet split files
 def _read_split(split_file: Path) -> list[tuple[str, int]]:
     samples: list[tuple[str, int]] = []
     for line in split_file.read_text(encoding="utf-8").splitlines():
@@ -73,7 +101,7 @@ def _read_split(split_file: Path) -> list[tuple[str, int]]:
         raise RuntimeError(f"Empty split file: {split_file}")
     return samples
 
-
+# Split official trainval set into training and validation subsets
 def _split_indices(n: int, val_ratio: float, seed: int) -> Tuple[list[int], list[int]]:
     if n < 2 or val_ratio <= 0:
         return list(range(n)), []
@@ -83,7 +111,7 @@ def _split_indices(n: int, val_ratio: float, seed: int) -> Tuple[list[int], list
     perm = torch.randperm(n, generator=g).tolist()
     return perm[val_len:], perm[:val_len]
 
-
+# Custom dataset wrapper for Oxford-IIIT Pet images
 class PetsDataset(Dataset):
     def __init__(
         self,
@@ -100,6 +128,7 @@ class PetsDataset(Dataset):
     def __len__(self):
         return len(self.samples)
 
+    # Load image and corresponding label
     def __getitem__(self, idx):
         stem, label = self.samples[idx]
         img_path = self.img_dir / f"{stem}.jpg"
@@ -110,6 +139,7 @@ class PetsDataset(Dataset):
 
         return img, torch.tensor(label, dtype=torch.long)
 
+# Create dataloaders for training and validation
 def get_train_val_loaders(
     root: str,
     batch_size: int,
@@ -119,7 +149,7 @@ def get_train_val_loaders(
     pin_memory: bool,
     seed: int = 42,
 ) -> Tuple[DataLoader, Optional[DataLoader]]:
-    del download  # Kept for API compatibility with train.py
+    _download_oxford_pet(root, download)  
     img_dir, trainval_txt, _ = _resolve_oxford_pet_dirs(root)
     all_samples = _read_split(trainval_txt)
     train_idx, val_idx = _split_indices(len(all_samples), val_ratio=val_ratio, seed=seed)
@@ -158,7 +188,7 @@ def get_train_val_loaders(
     )
     return train_loader, val_loader
 
-
+# Create dataloader for official test set
 def get_test_loader(
     root: str,
     batch_size: int,
@@ -166,7 +196,7 @@ def get_test_loader(
     download: bool,
     pin_memory: bool,
 ) -> DataLoader:
-    del download  # Kept for API compatibility with train.py
+    _download_oxford_pet(root, download)  
     img_dir, _, test_txt = _resolve_oxford_pet_dirs(root)
     test_samples = _read_split(test_txt)
     test_ds = PetsDataset(
@@ -183,6 +213,7 @@ def get_test_loader(
         pin_memory=pin_memory,
     )
 
+# Create dataloader for evaluating final training performance
 def get_train_eval_loader(
     root: str,
     batch_size: int,
@@ -192,7 +223,7 @@ def get_train_eval_loader(
     pin_memory: bool,
     seed: int = 42,
 ) -> DataLoader:
-    del download
+    _download_oxford_pet(root, download)
     img_dir, trainval_txt, _ = _resolve_oxford_pet_dirs(root)
     all_samples = _read_split(trainval_txt)
 

@@ -1,9 +1,10 @@
-import torch
 import os
+import torch
 
 from dataset import get_test_loader, NUM_CLASSES
 from model import build_model
 
+# Evaluate model accuracy on the official test set
 @torch.no_grad()
 def evaluate(model, loader, device):
     model.eval()
@@ -44,17 +45,18 @@ def main():
         )
     )
 
+    # Load official Oxford-IIIT Pet test set
     test_loader = get_test_loader(
         root='data',
         batch_size=64,
         num_workers=4,
-        download=False,
-        pin_memory=True,
+        download=True,
+        pin_memory=torch.cuda.is_available(),
     )
 
     acc = evaluate(model, test_loader, device)
 
-    print(f'Final Test Accuracy: {acc:.4f}')
+    print(f'Final Test Accuracy: {acc * 100:.2f}%')
 
 
 if __name__ == '__main__':

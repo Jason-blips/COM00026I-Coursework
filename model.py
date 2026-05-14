@@ -1,11 +1,10 @@
-# MODEL.py
 import torch
 import torch.nn as nn
 
 class ImprovedBlock(nn.Module):
     def __init__(self, in_ch, out_ch, stride=1):
         super().__init__()
-
+        
         self.conv1 = nn.Conv2d(in_ch, out_ch, 3, stride, 1, bias=False)
         self.bn1 = nn.BatchNorm2d(out_ch)
         self.conv2 = nn.Conv2d(out_ch, out_ch, 3, 1, 1, bias=False)
@@ -13,6 +12,8 @@ class ImprovedBlock(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         
         self.shortcut = nn.Sequential()
+
+        # Projection shortcut for downsampling or channel matching
         if stride != 1 or in_ch != out_ch:
             self.shortcut = nn.Sequential(
                 nn.AvgPool2d(stride),
@@ -27,12 +28,13 @@ class ImprovedBlock(nn.Module):
         out += identity
         return self.relu(out)
 
+# Custom CNN classifier for Oxford-IIIT Pet
 class MyFinalModel(nn.Module):
     def __init__(self, num_classes=37):
         super().__init__()
-        # 第一层：快速降低空间分辨率 (112x112)
+        
         self.stem = nn.Sequential(
-            nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False), # Conv3x3 stride=1 
+            nn.Conv2d(3, 64, kernel_size=3, stride=1, padding=1, bias=False), 
             nn.BatchNorm2d(64),
             nn.ReLU(inplace=True),
         )
@@ -50,9 +52,11 @@ class MyFinalModel(nn.Module):
             ImprovedBlock(512, 512, stride = 1)
         )
         
+        # Combine global average and max pooled features
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
         self.max_pool = nn.AdaptiveMaxPool2d(1)
         
+        # Fully connected classification head
         self.fc = nn.Sequential(
             nn.Flatten(),
             nn.Linear(512 * 2, 512),
@@ -62,6 +66,7 @@ class MyFinalModel(nn.Module):
             nn.Linear(512, num_classes)
         )
 
+        # Kaiming initialisation for stable training
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
@@ -69,6 +74,7 @@ class MyFinalModel(nn.Module):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
 
+    # Forward propagation
     def forward(self, x):
         x = self.stem(x)
         x = self.stage1(x)
@@ -81,6 +87,7 @@ class MyFinalModel(nn.Module):
         
         return self.fc(x)
 
+# Build model and move to selected device
 def build_model(num_classes=37, device=None):
     model = MyFinalModel(num_classes=num_classes)
     if device is None:
